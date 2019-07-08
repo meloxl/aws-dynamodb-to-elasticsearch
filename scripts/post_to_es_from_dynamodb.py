@@ -4,13 +4,15 @@ import boto3.dynamodb.types
 import logging
 import argparse
 from boto3 import Session
+from ddb_to_es import handler
+import os
 
 logging.basicConfig()
 
-client = boto3.client('lambda', region_name='us-east-1')
 reports = []
 object_amount = 0
 partSize = 0
+
 
 def main():
     parser = argparse.ArgumentParser(description='Set-up importing to dynamodb')
@@ -20,19 +22,21 @@ def main():
     parser.add_argument('--sk', metavar='AS', help='aws secret key')
     parser.add_argument('--esarn', metavar='ESARN', help='event source ARN')
     parser.add_argument('--lf', metavar='LF', help='lambda function that posts data to es')
+    parser.add_argument('--es', metavar='ES', help='es host url without http/https')
+    parser.add_argument('--index', metavar='INDEX', help='es index name')
 
     scan_limit = 300
     args = parser.parse_args()
-    
+
     if (args.rn is None):
         print('Specify region parameter (-rn)')
         return
 
-    client = boto3.client('lambda', region_name=args.rn)
-    import_dynamodb_items_to_es(args.tn, args.sk, args.ak, args.rn, args.esarn, args.lf, scan_limit)
+    import_dynamodb_items_to_es(args.tn, args.sk, args.ak, args.rn,
+                                args.esarn, args.lf, scan_limit, args.es, args.index)
 
 
-def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, event_source_arn, lambda_f, scan_limit):
+def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, event_source_arn, lambda_f, scan_limit, es_host, es_index):
     global reports
     global partSize
     global object_amount
@@ -40,7 +44,15 @@ def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, 
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
 
-    session = Session(aws_access_key_id=aws_access, aws_secret_access_key=aws_secret, region_name=aws_region)
+    session = Session(aws_access_key_id=aws_access,
+                      aws_secret_access_key=aws_secret, region_name=aws_region)
+
+    os.environ['AWS_ACCESS_KEY_ID'] = aws_access
+    os.environ['AWS_SECRET_ACCESS_KEY'] = aws_secret
+    os.environ['AWS_REGION'] = aws_region
+    os.environ['ES_HOST'] = es_host
+    os.environ['ES_INDEX'] = es_index
+
     dynamodb = session.resource('dynamodb')
     logger.info('dynamodb: %s', dynamodb)
     ddb_table_name = table_name
@@ -88,13 +100,8 @@ def send_to_eslambda(items, lambda_f):
         "Records": items
     }
     records = json.dumps(records_data)
-    lambda_response = client.invoke(
-        FunctionName=lambda_f,
-        Payload=records
-    )
-    reports = []
-    partSize = 0
-    print(lambda_response)
+
+    handler(records_data, '')
 
 
 if __name__ == "__main__":
