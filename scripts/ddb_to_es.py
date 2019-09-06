@@ -195,7 +195,16 @@ def getTable():
 
 
 def generateId(record):
+    # 默认排序见和分区键的情况
+    es_id = os.getenv('ES_ID', '')
     keys = unmarshalJson(record['dynamodb']['Keys'])
+    if  es_id != "":
+        es_id_list = eval(es_id)
+        key = '|'.join(es_id_list)
+        # print(type(newId))
+        newId = keys[key]
+        # print(newId)
+        return newId
 
     # Concat HASH and RANGE key with | in between
     newId = ""
@@ -206,6 +215,7 @@ def generateId(record):
         newId += str(value)
         i += 1
 
+    print(newId)
     return newId
 
 # Unmarshal a JSON that is DynamoDB formatted

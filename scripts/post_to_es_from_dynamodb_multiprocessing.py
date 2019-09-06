@@ -25,8 +25,10 @@ def main():
     parser.add_argument('--lf', metavar='LF', help='lambda function that posts data to es')
     parser.add_argument('--es', metavar='ES', help='es host url without http/https')
     parser.add_argument('--index', metavar='INDEX', help='es index name')
+    parser.add_argument('--id', metavar='ID', help='es id name')
 
-    scan_limit = 300
+
+    scan_limit = 200
     args = parser.parse_args()
 
     if (args.rn is None):
@@ -34,10 +36,10 @@ def main():
         return
 
     import_dynamodb_items_to_es(args.tn, args.sk, args.ak, args.rn,
-                                args.esarn, args.lf, scan_limit, args.es, args.index)
+                                args.esarn, args.lf, scan_limit, args.es, args.index, args.id)
 
 
-def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, event_source_arn, lambda_f, scan_limit, es_host, es_index):
+def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, event_source_arn, lambda_f, scan_limit, es_host, es_index, es_id):
     global reports
     global partSize
     global object_amount
@@ -53,6 +55,7 @@ def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, 
     os.environ['AWS_REGION'] = aws_region
     os.environ['ES_HOST'] = es_host
     os.environ['ES_INDEX'] = es_index
+    os.environ['ES_ID'] = es_id
 
     dynamodb = session.resource('dynamodb')
     logger.info('dynamodb: %s', dynamodb)
@@ -63,7 +66,7 @@ def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, 
     logger.info('ddb_keys_name: %s', ddb_keys_name)
     response = None
 
-    pool = Pool(8)
+    pool = Pool(5)
 
     while True:
         if not response:
@@ -85,10 +88,11 @@ def import_dynamodb_items_to_es(table_name, aws_secret, aws_access, aws_region, 
             object_amount += 1
             logger.info(object_amount)
             reports.append(record)
+            # print("reports: %s" % reports)
 
             if partSize >= 100:
                 pool.apply_async(send_to_eslambda, args=(reports, lambda_f))
-                # send_to_eslambda(reports, lambda_f)
+            # send_to_eslambda(reports, lambda_f)
 
         if 'LastEvaluatedKey' not in response:
             break
@@ -107,7 +111,7 @@ def send_to_eslambda(items, lambda_f):
         "Records": items
     }
     records = json.dumps(records_data)
-
+    print("records_data: %s" % records_data)
     handler(records_data, '')
 
 
